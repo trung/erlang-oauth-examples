@@ -1,28 +1,29 @@
 %%
 %% This is an example client for the test server at http://term.ie/oauth/example/.
 %%
-%% The echo/0 function calls the server with the default params, using the
-%% default (HMAC-SHA1) signature method. To call the server with different
-%% params, use echo/1. To call the server with a different signature method,
-%% use echo/2, together with consumer/1.
+%% Use echo/0 to call the server with the default params and the default
+%% signature method (HMAC-SHA1). Use echo/1 to specify *either* different
+%% params, *or* a different signature method. Use echo/2 if you want to
+%% specify *both* the params and the signature method.
 %%
 
 -module(oauth_termie).
 
 -compile(export_all).
 
--export([echo/0, echo/1, consumer/1, echo/2]).
+-export([echo/0, echo/1, echo/2]).
 
 
 echo() ->
-  echo([{"bar", "baz"}, {"method", "foo"}]).
+  echo(hmac_sha1).
 
-echo(Params) ->
-  echo(Params, consumer(hmac_sha1)).
+echo(Params) when is_list(Params) ->
+  echo(Params, hmac_sha1);
+echo(SigMethod) when is_atom(SigMethod) ->
+  echo([{"bar", "baz"}, {"method", "foo"}], SigMethod).
 
-consumer(SigMethod) ->
-  {"key", "secret", SigMethod}.
-
+echo(Params, SigMethod) when is_atom(SigMethod) ->
+  echo(Params, {"key", consumer_secret(SigMethod), SigMethod});
 echo(Params, Consumer) ->
   oauth_client:get(url(oauth_termie_request_token_url), [], Consumer, "", "", fun(Response) ->
     echo(Params, Consumer, oauth_http:response_params(Response))
@@ -37,6 +38,13 @@ echo(Params, Consumer, _, AParams) ->
   oauth_client:get(url(oauth_termie_echo_url), Params, Consumer, AParams, fun(Response) ->
     {ok, lists:keysort(1, oauth_http:response_params(Response))}
   end).
+
+consumer_secret(plaintext) ->
+  "secret";
+consumer_secret(hmac_sha1) ->
+  "secret";
+consumer_secret(rsa_sha1) ->
+  "data/rsa_pkey.pem".
 
 default(oauth_termie_request_token_url) ->
   "http://term.ie/oauth/example/request_token.php";

@@ -46,10 +46,10 @@ serve_oauth_request_token(Request) ->
   case Request:get(method) of
     'GET' ->
       serve_oauth(Request, fun(URL, Params, Consumer, Signature) ->
-        case oauth_signature:value("GET", URL, Params, Consumer, "") of
-          Signature ->
+        case oauth:verify(Signature, "GET", URL, Params, Consumer, "") of
+          true ->
             ok(Request, <<"oauth_token=requestkey&oauth_token_secret=requestsecret">>);
-          _ ->
+          false ->
             bad(Request, "invalid signature value.")
         end
       end);
@@ -61,16 +61,16 @@ serve_oauth_access_token(Request) ->
   case Request:get(method) of
     'GET' ->
       serve_oauth(Request, fun(URL, Params, Consumer, Signature) ->
-        case get_value("oauth_token", Params) of
+        case oauth:token(Params) of
           "requestkey" ->
-            case oauth_signature:value("GET", URL, Params, Consumer, "requestsecret") of
-              Signature ->
+            case oauth:verify(Signature, "GET", URL, Params, Consumer, "requestsecret") of
+              true ->
                 ok(Request, <<"oauth_token=accesskey&oauth_token_secret=accesssecret">>);
-              _ ->
+              false ->
                 bad(Request, "invalid signature value.")
             end;
           _ ->
-            bad(Request, "invalid oauth token")
+            bad(Request, "invalid oauth token.")
         end
       end);
     _ ->
@@ -81,13 +81,13 @@ serve_echo(Request) ->
   case Request:get(method) of
     'GET' ->
       serve_oauth(Request, fun(URL, Params, Consumer, Signature) ->
-        case get_value("oauth_token", Params) of
+        case oauth:token(Params) of
           "accesskey" ->
-            case oauth_signature:value("GET", URL, Params, Consumer, "accesssecret") of
-              Signature ->
+            case oauth:verify(Signature, "GET", URL, Params, Consumer, "accesssecret") of
+              true ->
                 EchoParams = lists:filter(fun({K, _}) -> not lists:prefix("oauth_", K) end, Params),
                 ok(Request, oauth_uri:params_to_string(EchoParams));
-              _ ->
+              false ->
                 bad(Request, "invalid signature value.")
             end;
           _ ->
@@ -102,31 +102,28 @@ serve_oauth(Request, Fun) ->
   Params = Request:parse_qs(),
   case get_value("oauth_version", Params) of
     "1.0" ->
-      Key = get_value("oauth_consumer_key", Params),
-      case fetch_consumer_secret(Key) of
-        {just, ConsumerSecret} ->
-          case signature_method(Params) of
-            {just, SignatureMethod} ->
-              Consumer = {Key, ConsumerSecret, SignatureMethod},
-              Signature = proplists:get_value("oauth_signature", Params),
-              URL = string:concat("http://0.0.0.0:8000", Request:get(path)),
-              Fun(URL, proplists:delete("oauth_signature", Params), Consumer, Signature);
-            nothing ->
-              bad(Request, "invalid signature method.")
-          end;
-        nothing ->
-          bad(Request, "invalid consumer key.")
+      ConsumerKey = get_value("oauth_consumer_key", Params),
+      SigMethod = get_value("oauth_signature_method", Params),
+      case consumer_lookup(ConsumerKey, SigMethod) of
+        none ->
+          bad(Request, "invalid consumer (key or signature method).");
+        Consumer ->
+          Signature = proplists:get_value("oauth_signature", Params),
+          URL = string:concat("http://0.0.0.0:8000", Request:get(path)),
+          Fun(URL, proplists:delete("oauth_signature", Params), Consumer, Signature)
       end;
     _ ->
       bad(Request, "invalid oauth version.")
   end.
 
-signature_method(Params) ->
-  case proplists:get_value("oauth_signature_method", Params) of
-    "PLAINTEXT" -> {just, plaintext};
-    "HMAC-SHA1" -> {just, hmac_sha1};
-    _ -> nothing
-  end.
+consumer_lookup("key", "PLAINTEXT") ->
+  {"key", "secret", plaintext};
+consumer_lookup("key", "HMAC-SHA1") ->
+  {"key", "secret", hmac_sha1};
+consumer_lookup("key", "RSA-SHA1") ->
+  {"key", "data/rsa_cert.pem", rsa_sha1};
+consumer_lookup(_, _) ->
+  none.
 
 ok(Request, Body) ->
   Request:respond({200, [], Body}).
@@ -136,8 +133,3 @@ bad(Request, Reason) ->
 
 method_not_allowed(Request) ->
   Request:respond({405, [], <<>>}).
-
-fetch_consumer_secret("key") ->
-  {just, "secret"};
-fetch_consumer_secret(_) ->
-  nothing.

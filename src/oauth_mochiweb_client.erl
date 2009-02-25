@@ -10,16 +10,21 @@
 
 
 echo() ->
-  echo([{"bar", "baz"}, {"method", "foo"}]).
+  oauth_termie(echo, []).
 
 echo(Params) ->
-  echo(Params, consumer(hmac_sha1)).
-
-consumer(SigMethod) ->
-  {"key", "secret", SigMethod}.
+  oauth_termie(echo, [Params]).
 
 echo(Params, Consumer) ->
-  put(oauth_termie_request_token_url, "http://0.0.0.0:8000/oauth/request_token"),
-  put(oauth_termie_access_token_url, "http://0.0.0.0:8000/oauth/access_token"),
-  put(oauth_termie_echo_url, "http://0.0.0.0:8000/echo"),
-  oauth_termie:echo(Params, Consumer).
+  oauth_termie(echo, [Params, Consumer]).
+
+oauth_termie(F, Args) ->
+  case get(oauth_termie_request_token_url) of
+    undefined ->
+      put(oauth_termie_request_token_url, "http://0.0.0.0:8000/oauth/request_token"),
+      put(oauth_termie_access_token_url, "http://0.0.0.0:8000/oauth/access_token"),
+      put(oauth_termie_echo_url, "http://0.0.0.0:8000/echo"),
+      apply(oauth_termie, F, Args);
+    _ ->
+      apply(oauth_termie, F, Args)
+  end.

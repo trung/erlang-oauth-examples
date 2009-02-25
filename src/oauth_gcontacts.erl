@@ -17,7 +17,7 @@
 
 
 consumer() ->
-  {"weitu.googlepages.com", "x", {rsa_sha1, "data/oauth_gcontacts_pkey.pem"}}.
+  {"weitu.googlepages.com", "data/oauth_gcontacts_pkey.pem", rsa_sha1}.
 
 get_request_token() ->
   oauth_google_client:get_request_token(consumer(), "http://www.google.com/m8/feeds").
