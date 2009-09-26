@@ -3,28 +3,38 @@
 %%
 %% Usage is the same as oauth_termie.
 %%
-
 -module(oauth_mochiweb_client).
 
 -compile(export_all).
 
+start() ->
+  start(hmac_sha1).
 
-echo() ->
-  oauth_termie(echo, []).
+start(SigMethod) when is_atom(SigMethod) ->
+  start(consumer(SigMethod));
+start(Consumer) ->
+  oauth_client:start(Consumer).
 
-echo(Params) ->
-  oauth_termie(echo, [Params]).
+consumer(rsa_sha1) ->
+  {"key", "data/rsa_pkey.pem", rsa_sha1};
+consumer(SigMethod) ->
+  {"key", "secret", SigMethod}.
 
-echo(Params, Consumer) ->
-  oauth_termie(echo, [Params, Consumer]).
+get_request_token(Client) ->
+  URL = "http://0.0.0.0:8000/oauth/request_token",
+  oauth_client:get_request_token(Client, URL, [], querystring).
 
-oauth_termie(F, Args) ->
-  case get(oauth_termie_request_token_url) of
-    undefined ->
-      put(oauth_termie_request_token_url, "http://0.0.0.0:8000/oauth/request_token"),
-      put(oauth_termie_access_token_url, "http://0.0.0.0:8000/oauth/access_token"),
-      put(oauth_termie_echo_url, "http://0.0.0.0:8000/echo"),
-      apply(oauth_termie, F, Args);
-    _ ->
-      apply(oauth_termie, F, Args)
+get_access_token(Client) ->
+  URL = "http://0.0.0.0:8000/oauth/access_token",
+  oauth_client:get_access_token(Client, URL, [], querystring).
+
+echo(Client) ->
+  echo(Client, [{"bar", "baz"}, {"method", "foo"}]).
+
+echo(Client, Params) ->
+  case oauth_client:get(Client, "http://0.0.0.0:8000/echo", Params, querystring) of
+    {ok, _Headers, Body} ->
+      {ok, lists:keysort(1, oauth_uri:params_from_string(Body))};
+    Error ->
+      Error
   end.
