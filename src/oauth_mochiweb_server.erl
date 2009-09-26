@@ -6,13 +6,11 @@
 %%
 %% It is easiest to start the server via the supervisor (oauth_mochiweb:start/0).
 %%
-
 -module(oauth_mochiweb_server).
 
 -export([start/1, stop/0]).
 
 -import(proplists, [get_value/2]).
-
 
 start(Options) ->
   mochiweb_http:start([{name, ?MODULE}, {loop, fun serve/1}|Options]).

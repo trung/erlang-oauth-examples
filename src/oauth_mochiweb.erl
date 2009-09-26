@@ -1,13 +1,11 @@
 %%
 %% This is a supervisor for oauth_mochiweb_server.
 %%
-
 -module(oauth_mochiweb).
 
 -behaviour(supervisor).
 
 -export([start/0, start_link/0, init/1]).
-
 
 start() ->
   {ok, Pid} = start_link(), unlink(Pid).
