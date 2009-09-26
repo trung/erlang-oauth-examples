@@ -1,29 +1,47 @@
 %%
 %% This is an example client for the Google Contacts Data API.
 %%
-%% Usage is similar to oauth_gcal. The 'crypto', 'inets', and 'ssl'
-%% applications need to be running. Call get_request_token/0 first,
-%% and then authorize the request token as prompted. You can then
-%% call get_access_token/0 followed by get_feed/0.
+%% Example usage:
 %%
-%% cf. http://groups.google.com/group/oauth/msg/0cf50121f946a889
+%%   $ make
+%%   ...
+%%   $ erl -pa ebin -pa path/to/erlang-oauth/ebin -s crypto -s inets -s ssl
+%%   ...
+%%   1> {ok, Client} = oauth_gcontacts:start().
+%%   ...
+%%   2> {ok, Token} = oauth_gcontacts:get_request_token(Client).
+%%   ...
+%%   3> AuthorizeURL = oauth_gcontacts:authorize_url(Token).
+%%   ...
+%%   4> ok = oauth_gcontacts:get_access_token(Client).
+%%   ...
+%%   5> {ok, Headers, XML} = oauth_gcontacts:get_feed(Client).
+%%   ...
+%%   6> oauth_gcontacts:feed_titles(XML).
+%%   ...
 %%
-
+%% Note that before fetching the access token (step 4) you need to have
+%% authorized the request token.
+%%
 -module(oauth_gcontacts).
 
 -compile(export_all).
 
--define(URL, "http://www.google.com/m8/feeds/contacts/default/base").
+start() ->
+  % cf. http://groups.google.com/group/oauth/msg/0cf50121f946a889
+  oauth_client:start({"weitu.googlepages.com", "data/oauth_gcontacts_pkey.pem", rsa_sha1}).
 
+get_request_token(Client) ->
+  oauth_google:get_request_token(Client, "http://www.google.com/m8/feeds").
 
-consumer() ->
-  {"weitu.googlepages.com", "data/oauth_gcontacts_pkey.pem", rsa_sha1}.
+authorize_url(Token) ->
+  oauth_google:authorize_url(Token).
 
-get_request_token() ->
-  oauth_google_client:get_request_token(consumer(), "http://www.google.com/m8/feeds").
+get_access_token(Client) ->
+  oauth_google:get_access_token(Client).
 
-get_access_token() ->
-  oauth_google_client:get_access_token().
+get_feed(Client) ->
+  oauth_client:get(Client, "http://www.google.com/m8/feeds/contacts/default/base").
 
-get_feed() ->
-  oauth_google_client:get_feed(?URL).
+feed_titles(XML) ->
+  oauth_google:feed_titles(XML).
