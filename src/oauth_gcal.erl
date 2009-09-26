@@ -8,42 +8,57 @@
 %%
 %%   https://www.google.com/accounts/ManageDomain
 %%
+%% Example usage:
 %%
-%% Make sure the 'crypto', 'inets', and 'ssl' applications are running.
-%% Then call oauth_gcal:get_request_token/1 with your consumer tuple.
-%% This should prompt you to authorize the request token. The consumer
-%% tuple and the response parameters are stored in the process dictionary
-%% for ease of use.
+%%   $ make
+%%   ...
+%%   $ erl -pa ebin -pa path/to/erlang-oauth/ebin -s crypto -s inets -s ssl
+%%   ...
+%%   1> Consumer = {"...KEY...", "...SECRET...", hmac_sha1}.
+%%   ...
+%%   2> {ok, Client} = oauth_gcal:start(Consumer).
+%%   ...
+%%   3> {ok, Token} = oauth_gcal:get_request_token(Client).
+%%   ...
+%%   4> AuthorizeURL = oauth_gcal:authorize_url(Token).
+%%   ...
+%%   5> ok = oauth_gcal:get_access_token(Client).
+%%   ...
+%%   6> {ok, Headers, XML} = oauth_gcal:get_feed(Client).
+%%   ...
+%%   7> oauth_gcal:feed_titles(XML).
+%%   ...
 %%
-%% Once you have granted access, call oauth_gcal:get_access_token/0,
-%% and then oauth_gcal:get_feed/0. This should return {ok, XML}, where
-%% XML is an xmerl xmlElement record. The oauth_google_client:titles/1
-%% function can be used to extract all the entry titles from the data.
+%% Note that before fetching the access token (step 5) you need to have
+%% authorized the request token.
 %%
-
 -module(oauth_gcal).
 
 -compile(export_all).
 
--define(URL, "http://www.google.com/calendar/feeds/default/allcalendars/full").
+start(Consumer) ->
+  oauth_client:start(Consumer).
 
+get_request_token(Client) ->
+  oauth_google:get_request_token(Client, "http://www.google.com/calendar/feeds/").
 
-get_request_token(Consumer) ->
-  oauth_google_client:get_request_token(Consumer, "http://www.google.com/calendar/feeds/").
+authorize_url(Token) ->
+  oauth_google:authorize_url(Token).
 
-get_access_token() ->
-  oauth_google_client:get_access_token().
+get_access_token(Client) ->
+  oauth_google:get_access_token(Client).
 
-get_feed() ->
-  AParams = oauth_google_client:access_token_response_params(),
-  oauth_client:get(?URL, [], oauth_google_client:consumer(), AParams, fun({_, Headers, _}) ->
-    % The first request to ?FEED_URL will return a redirect response.
-    % If we blindly follow the redirect the request will fail. This is
-    % because the new location contains an additional parameter ("gsessionid"),
-    % and so the OAuth signature will be invalid for this new request.
-    % Instead, the parameter is extracted and used to generate a fresh request.
-    Location = proplists:get_value("location", Headers),
-    {_, _, _, _, _, [$?|ParamsString]} = http_uri:parse(Location),
-    Gsessionid = proplists:lookup("gsessionid", oauth_uri:params_from_string(ParamsString)),
-    oauth_google_client:get_feed(?URL, [Gsessionid])
-  end).
+get_feed(Client) ->
+  URL = "https://www.google.com/calendar/feeds/default/allcalendars/full",
+  % Requesting this URL will return a redirect response. If we blindly follow
+  % the redirect the request will fail because the OAuth signature will be
+  % invalid for this request. We therefore extract the "gsessionid" parameter,
+  % and generate a fresh request including this parameter.
+  {{_, 302, _}, Headers, _} = oauth_client:get(Client, URL),
+  Location = proplists:get_value("location", Headers),
+  {_, _, _, _, _, [$?|Params]} = http_uri:parse(Location),
+  Gsessionid = proplists:lookup("gsessionid", oauth_uri:params_from_string(Params)),
+  oauth_client:get(Client, URL, [Gsessionid]).
+
+feed_titles(XML) ->
+  oauth_google:feed_titles(XML).
